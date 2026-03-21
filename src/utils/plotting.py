@@ -87,7 +87,14 @@ class Plotting():
     def mobo_2d_pareto(
         self, df, x="nonzero_count", set_xlabel="Complexity",
         y="generalizability_error", set_ylabel="Generalizability",
-        plot_save_name="pareto", xlim=None, nbins_y=50  , y_bin_width=None,
+        plot_save_name="pareto", xlim=None, ylim=None,
+        nbins_x=None, x_bin_width=None, xtick_cnt=2,
+        nbins_y=50, y_bin_width=None,
+        xlim_ins=None, ylim_ins=None,
+        nbins_x_ins=None, x_bin_width_ins=None,
+        nbins_y_ins=19, y_bin_width_ins=None,
+        inset_width="45%", inset_height="45%",
+        inset_loc="upper right", inset_borderpad=1.0,
         log_counts=False, count_gamma=0.5, vmax_percentile=99.0, max_xticks=12,
         show=False,
         **_ignored_kwargs
@@ -96,13 +103,58 @@ class Plotting():
         if df_f.empty:
             return
 
+        def _make_edges(lo, hi, nbins=None, bin_width=None, default_nbins=50):
+            lo = float(lo)
+            hi = float(hi)
+            if hi <= lo:
+                hi = lo + 1.0
+
+            if bin_width is not None:
+                bw = float(bin_width)
+                if bw <= 0:
+                    n_eff = max(int(default_nbins if nbins is None else nbins), 2)
+                    bw = (hi - lo) / n_eff
+                edges = np.arange(lo, hi + bw, bw, dtype=float)
+                if edges.size < 2:
+                    edges = np.array([lo, hi], dtype=float)
+                edges[0] = lo
+                edges[-1] = hi
+            else:
+                n_eff = max(int(default_nbins if nbins is None else nbins), 2)
+                edges = np.linspace(lo, hi, n_eff + 1)
+
+            return edges
+
+        def _make_centered_integer_edges(lo, hi, nbins=None, bin_width=None):
+            n_cols = float(hi - lo + 1)
+            if n_cols <= 0:
+                n_cols = 1.0
+
+            if bin_width is not None:
+                bw = float(bin_width)
+                if bw <= 0:
+                    n_eff = max(int(n_cols if nbins is None else nbins), 2)
+                    bw = n_cols / n_eff
+            elif nbins is not None:
+                n_eff = max(int(nbins), 2)
+                bw = n_cols / n_eff
+            else:
+                bw = 1.0
+
+            x_start = float(lo) - 0.5 * bw
+            x_stop = float(hi) + 0.5 * bw
+            n_eff = max(int(np.round((x_stop - x_start) / bw)), 1)
+            edges = x_start + bw * np.arange(n_eff + 1, dtype=float)
+            edges[0] = x_start
+            edges[-1] = x_stop
+            return edges
+
         if x == "a":
             c_raw = df_f[x].to_numpy(dtype=float)
             c_int = np.rint(c_raw).astype(int)
 
             mvals = df_f[y].to_numpy(dtype=float)
 
-            # x limits
             if xlim is None:
                 x_lo = 0
                 x_hi = int(max(np.max(c_int), 0))
@@ -117,8 +169,7 @@ class Plotting():
             x_lo = max(x_lo, 0)
             x_hi = max(x_hi, x_lo)
 
-            # y limits used for BOTH binning and plotting
-            ylim = _ignored_kwargs.get("ylim", None)  # allow passing ylim via kwargs without changing your signature
+            ylim = _ignored_kwargs.get("ylim", None)
             if ylim is None:
                 y_lo = 0.0
                 y_hi = 0.5
@@ -128,7 +179,6 @@ class Plotting():
                 if y_hi <= y_lo:
                     y_lo, y_hi = 0.0, 0.5
 
-            # filter to plotted domain so bins match what you see
             m = (
                 np.isfinite(c_int) & np.isfinite(mvals)
                 & (c_int >= x_lo) & (c_int <= x_hi)
@@ -139,10 +189,13 @@ class Plotting():
             if c_int.size == 0:
                 return
 
-            # integer-centered bins
-            x_edges = np.arange(x_lo - 0.5, x_hi + 1.5, 1.0)
+            x_edges = _make_centered_integer_edges(
+                x_lo,
+                x_hi,
+                nbins=nbins_x,
+                bin_width=x_bin_width
+            )
 
-            # y bins on [y_lo, y_hi], not [0, 1]
             if y_bin_width is not None:
                 bw = float(y_bin_width)
                 if bw <= 0:
@@ -183,100 +236,57 @@ class Plotting():
             )
 
             if plot_save_name == "CvV_lim":
-                # y zoom based on the plotted y values
-                y_zoom_hi = float(np.nanpercentile(mvals, 95))
+                y_raw = df_f[y].to_numpy(dtype=float)
+
+                y_zoom_hi = float(np.nanpercentile(y_raw, 95))
                 y_zoom_hi = min(max(y_zoom_hi, 1e-3), 0.005)
 
-                # x zoom in low-complexity region
-                x_lo_ins = int(x_lo)
-                x_hi_ins = int(min(x_lo + 10, x_hi))
+                if xlim_ins is None:
+                    x_lo_ins = float(x_lo)
+                    x_hi_ins = float(x_hi)
+                else:
+                    x_lo_ins = float(xlim_ins[0])
+                    x_hi_ins = float(xlim_ins[1])
 
-                y_lo_ins, y_hi_ins = float(y_lo), float(y_zoom_hi)
+                x_lo_ins = max(x_lo_ins, float(x_lo))
+                x_hi_ins = min(x_hi_ins, float(x_hi))
+                if x_hi_ins <= x_lo_ins:
+                    x_hi_ins = x_lo_ins + 1.0
 
-                nbins_x_ins = int(x_hi_ins - x_lo_ins + 1)
-                nbins_y_ins = 19
+                if ylim_ins is None:
+                    y_lo_ins = 0.0
+                    y_hi_ins = float(y_zoom_hi)
+                else:
+                    y_lo_ins = float(ylim_ins[0])
+                    y_hi_ins = float(ylim_ins[1])
 
-                x_edges_ins = np.arange(x_lo_ins - 0.5, x_hi_ins + 1.5, 1.0)
-                y_edges_ins = np.linspace(y_lo_ins, y_hi_ins, nbins_y_ins + 1)
-
-                m_ins = (
-                    (c_int >= x_lo_ins) & (c_int <= x_hi_ins)
-                    & (mvals >= y_lo_ins) & (mvals <= y_hi_ins)
-                )
-                c_ins = c_int[m_ins]
-                y_ins = mvals[m_ins]
-
-                H_ins, _, _ = np.histogram2d(c_ins, y_ins, bins=[x_edges_ins, y_edges_ins])
-                H_ins = H_ins.T
-                Hm_ins = np.ma.masked_where(H_ins == 0, H_ins)
+                if y_hi_ins <= y_lo_ins:
+                    y_lo_ins = 0.0
+                    y_hi_ins = float(y_zoom_hi)
 
                 axins = inset_axes(
                     ax,
-                    width="45%",
-                    height="45%",
-                    loc="upper right",
-                    borderpad=1.0,
+                    width=inset_width,
+                    height=inset_height,
+                    loc=inset_loc,
+                    borderpad=inset_borderpad,
                 )
                 axins.set_facecolor("white")
                 axins.pcolormesh(
-                    x_edges_ins,
-                    y_edges_ins,
-                    Hm_ins,
+                    x_edges,
+                    y_edges,
+                    Hm,
                     shading="auto",
                     cmap="Blues",
                     norm=norm,
                 )
-                axins.set_xlim([x_edges_ins[0], x_edges_ins[-1]])
+                axins.set_xlim([x_lo_ins, x_hi_ins])
                 axins.set_ylim([y_lo_ins, y_hi_ins])
                 axins.tick_params(axis="both", labelsize=9)
                 axins.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
                 axins.yaxis.get_offset_text().set_size(9)
 
                 mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.35", lw=1.0)
-
-            # # Pareto step based on lowest occupied y-bin per x-bin, then running minimum
-            # n_x = H.shape[1]
-            # j_min = np.full(n_x, -1, dtype=int)
-            # for i in range(n_x):
-            #     rows = np.flatnonzero(H[:, i] > 0)
-            #     if rows.size:
-            #         j_min[i] = int(rows[0])
-
-            # j_front = np.full(n_x, -1, dtype=int)
-            # cur = None
-            # for i in range(n_x):
-            #     if j_min[i] >= 0:
-            #         cur = j_min[i] if cur is None else min(cur, j_min[i])
-            #     if cur is not None:
-            #         j_front[i] = int(cur)
-
-            # valid = np.flatnonzero(j_front >= 0)
-            # if valid.size:
-            #     i0 = int(valid[0])
-            #     y0 = float(y_edges[j_front[i0]])
-
-            #     # force a left intercept at x_lo (not at first occupied bin edge)
-            #     path_x = [float(x_lo), float(x_lo)]
-            #     path_y = [float(y_edges[-1]), y0]
-
-            #     x0_edge = float(x_edges[i0])
-            #     if x0_edge != path_x[-1]:
-            #         path_x.append(x0_edge)
-            #         path_y.append(y0)
-
-            #     for i in range(i0, n_x):
-            #         y_i = float(y_edges[j_front[i]])
-            #         x_r = float(x_edges[i + 1])
-            #         path_x.append(x_r)
-            #         path_y.append(y_i)
-
-            #         if i < n_x - 1:
-            #             y_next = float(y_edges[j_front[i + 1]])
-            #             if y_next != y_i:
-            #                 path_x.append(x_r)
-            #                 path_y.append(y_next)
-
-            #     ax.plot(path_x, path_y, color="red", linewidth=2.0, zorder=5)
 
             ax.set_xlabel(set_xlabel)
             ax.set_ylabel(set_ylabel)
@@ -309,11 +319,11 @@ class Plotting():
             if major[-1] != x_hi:
                 major = np.r_[major, x_hi]
             ax.set_xticks(major)
+
         elif x == "nonzero_count":
             xh = df_f[x].to_numpy(dtype=float)
             yh = df_f[y].to_numpy(dtype=float)
 
-            # display x limits
             if xlim is None:
                 x_lo = 0.0
                 x_hi = float(np.nanmax(xh))
@@ -330,7 +340,6 @@ class Plotting():
             if not np.isfinite(x_hi) or x_hi <= x_lo:
                 x_hi = x_lo + 1.0
 
-            # display y limits (keep your current behavior)
             ylim = _ignored_kwargs.get("ylim", None)
             if ylim is None:
                 y_lo_disp = 0.0
@@ -341,14 +350,14 @@ class Plotting():
                 if y_hi_disp <= y_lo_disp:
                     y_lo_disp, y_hi_disp = 0.0, 0.5
 
-            # bin edges: mimic else-branch behavior (edges over a larger domain, show half)
-            nb = max(int(nbins_y), 2)
+            x_edges = _make_edges(
+                x_lo,
+                x_hi,
+                nbins=nbins_x,
+                bin_width=x_bin_width,
+                default_nbins=nbins_y
+            )
 
-            span_x = float(x_hi - x_lo)
-            span_x = span_x if span_x > 0 else 1.0
-            x_edges = np.linspace(x_lo, x_lo + 2.0 * span_x, nb + 1)
-
-            # y edges exactly like else (0..1), independent of displayed ylim (0..0.5)
             if y_bin_width is not None:
                 bw = float(y_bin_width)
                 if bw <= 0:
@@ -359,22 +368,23 @@ class Plotting():
                 y_edges[0] = 0.0
                 y_edges[-1] = 1.0
             else:
-                y_edges = np.linspace(0.0, 1.0, nb + 1)
+                y_edges = np.linspace(0.0, 1.0, max(int(nbins_y), 2) + 1)
 
             H, _, _ = np.histogram2d(xh, yh, bins=[x_edges, y_edges])
             H = H.T
 
-            # normalize like else
             n_total = float(xh.size)
             if n_total > 0:
-                H = H / n_total
+                dx = np.diff(x_edges)
+                dy = np.diff(y_edges)
+                cell_area = dy[:, None] * dx[None, :]
+                H = H / (n_total * cell_area)
 
             Hm = np.ma.masked_where(H == 0, H)
 
             fig, ax = plt.subplots(figsize=(4.5, 4))
             ax.set_facecolor("white")
 
-            # norm logic identical to else
             norm = None
             if Hm.count():
                 pos = Hm.compressed()
@@ -394,48 +404,106 @@ class Plotting():
                 norm=norm
             )
 
-            # match else styling
             ax.set_xlabel(set_xlabel, fontsize=14)
             ax.set_ylabel(set_ylabel, fontsize=14)
             ax.tick_params(axis="both", labelsize=14)
 
-            # show the requested window (half of the internal edge-domain)
             ax.set_xlim([x_lo, x_hi])
             ax.set_ylim([y_lo_disp, y_hi_disp])
 
-            ax.xaxis.set_major_locator(MultipleLocator(10))
+            major = np.arange(x_lo, x_hi + 1, xtick_cnt, dtype=int)
+            if major.size == 0 or major[0] != x_lo:
+                major = np.r_[x_lo, major]
+            if major[-1] != x_hi:
+                major = np.r_[major, x_hi]
+            ax.set_xticks(major)
 
-            # inset for CvV_lim (same logic/appearance as else)
             if plot_save_name == "CvV_lim":
-                y_zoom_hi = float(np.nanpercentile(yh, 95))
+                x_raw = df_f[x].to_numpy(dtype=float)
+                y_raw = df_f[y].to_numpy(dtype=float)
+
+                y_zoom_hi = float(np.nanpercentile(y_raw, 95))
                 y_zoom_hi = min(max(y_zoom_hi, 1e-3), 0.005)
 
-                x_lo_ins = float(x_lo)
-                x_hi_ins = float(min(x_lo + 0.2 * (x_hi - x_lo), x_hi))
+                if xlim_ins is None:
+                    x_lo_ins = float(x_lo)
+                    x_hi_ins = float(x_hi)
+                else:
+                    x_lo_ins = float(xlim_ins[0])
+                    x_hi_ins = float(xlim_ins[1])
+
+                x_lo_ins = max(x_lo_ins, float(x_lo))
+                x_hi_ins = min(x_hi_ins, float(x_hi))
                 if x_hi_ins <= x_lo_ins:
                     x_hi_ins = x_lo_ins + 1.0
 
-                y_lo_ins, y_hi_ins = 0.0, y_zoom_hi
+                if ylim_ins is None:
+                    y_lo_ins = 0.0
+                    y_hi_ins = float(y_zoom_hi)
+                else:
+                    y_lo_ins = float(ylim_ins[0])
+                    y_hi_ins = float(ylim_ins[1])
 
-                nbins_x_ins = 19
-                nbins_y_ins = 19
+                if y_hi_ins <= y_lo_ins:
+                    y_lo_ins = 0.0
+                    y_hi_ins = float(y_zoom_hi)
 
-                x_edges_ins = np.linspace(x_lo_ins, x_hi_ins, nbins_x_ins + 1)
-                y_edges_ins = np.linspace(y_lo_ins, y_hi_ins, nbins_y_ins + 1)
+                x_edges_ins = _make_edges(
+                    x_lo_ins,
+                    x_hi_ins,
+                    nbins=nbins_x_ins,
+                    bin_width=x_bin_width_ins,
+                    default_nbins=nbins_x if nbins_x is not None else 50
+                )
 
-                H_ins, _, _ = np.histogram2d(xh, yh, bins=[x_edges_ins, y_edges_ins])
+                if y_bin_width_ins is not None:
+                    bw_ins = float(y_bin_width_ins)
+                    if bw_ins <= 0:
+                        bw_ins = (y_hi_ins - y_lo_ins) / max(int(nbins_y_ins), 2)
+                    y_edges_ins = np.arange(y_lo_ins, y_hi_ins + bw_ins, bw_ins, dtype=float)
+                    if y_edges_ins.size < 2:
+                        y_edges_ins = np.array([y_lo_ins, y_hi_ins], dtype=float)
+                    y_edges_ins[0] = y_lo_ins
+                    y_edges_ins[-1] = y_hi_ins
+                else:
+                    y_edges_ins = np.linspace(
+                        y_lo_ins,
+                        y_hi_ins,
+                        max(int(nbins_y_ins), 2) + 1
+                    )
+
+                m_ins = (
+                    np.isfinite(x_raw) & np.isfinite(y_raw)
+                    & (x_raw >= x_lo_ins) & (x_raw <= x_hi_ins)
+                    & (y_raw >= y_lo_ins) & (y_raw <= y_hi_ins)
+                )
+                x_ins = x_raw[m_ins]
+                y_ins = y_raw[m_ins]
+
+                H_ins, _, _ = np.histogram2d(
+                    x_ins,
+                    y_ins,
+                    bins=[x_edges_ins, y_edges_ins]
+                )
                 H_ins = H_ins.T
+
+                # Use the main-panel cell area as the reference area so that
+                # inset colors are comparable to the full plot colors.
+                dx_ref = np.diff(x_edges)
+                dy_ref = np.diff(y_edges)
+                ref_area = float(np.median(dx_ref) * np.median(dy_ref))
+
                 if n_total > 0:
-                    H_ins = H_ins / n_total
+                    H_ins = H_ins / (n_total * ref_area)
 
                 Hm_ins = np.ma.masked_where(H_ins == 0, H_ins)
 
                 axins = inset_axes(
                     ax,
-                    width="45%",
-                    height="45%",
-                    loc="upper right",
-                    borderpad=1.0,
+                    width=inset_width,
+                    height=inset_height,
+                    loc=inset_loc,
+                    borderpad=inset_borderpad,
                 )
                 axins.set_facecolor("white")
                 axins.pcolormesh(
@@ -451,12 +519,20 @@ class Plotting():
                 axins.tick_params(axis="both", labelsize=9)
                 axins.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
                 axins.yaxis.get_offset_text().set_size(9)
+
                 mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.35", lw=1.0)
         else:
             xh = df_f[x].to_numpy(dtype=float)
             yh = df_f[y].to_numpy(dtype=float)
 
-            x_edges = np.linspace(0.0, 1.0, max(int(nbins_y), 2) + 1)
+            x_edges = _make_edges(
+                0.0,
+                1.0,
+                nbins=nbins_x,
+                bin_width=x_bin_width,
+                default_nbins=nbins_y
+            )
+
             if y_bin_width is not None:
                 bw = float(y_bin_width)
                 if bw <= 0:
@@ -503,21 +579,26 @@ class Plotting():
             ax.set_xlabel(set_xlabel, fontsize=14)
             ax.set_ylabel(set_ylabel, fontsize=14)
             ax.tick_params(axis="both", labelsize=14)
-            ax.set_xlim([0.0, 0.5])
-            ax.set_ylim([0.0, 0.5])
+            ax.set_xlim(xlim)
+            ax.set_ylim(ylim)
 
             if plot_save_name == "CvV":
                 y_zoom_hi = float(np.nanpercentile(yh, 95))
                 y_zoom_hi = min(max(y_zoom_hi, 1e-3), 0.005)
 
-                x_lo_ins, x_hi_ins = 0.0, 0.1
-                y_lo_ins, y_hi_ins = 0.0, y_zoom_hi
+                x_lo_ins = 0.0
+                x_hi_ins = 0.1
+                y_lo_ins = 0.0
+                y_hi_ins = y_zoom_hi
 
-                nbins_x_ins = 19
-                nbins_y_ins = 19
-
-                x_edges_ins = np.linspace(x_lo_ins, x_hi_ins, nbins_x_ins + 1)
-                y_edges_ins = np.linspace(y_lo_ins, y_hi_ins, nbins_y_ins + 1)
+                x_edges_ins = _make_edges(
+                    x_lo_ins,
+                    x_hi_ins,
+                    nbins=nbins_x,
+                    bin_width=x_bin_width,
+                    default_nbins=19
+                )
+                y_edges_ins = np.linspace(y_lo_ins, y_hi_ins, 19 + 1)
 
                 H_ins, _, _ = np.histogram2d(xh, yh, bins=[x_edges_ins, y_edges_ins])
                 H_ins = H_ins.T
@@ -549,16 +630,15 @@ class Plotting():
                 axins.yaxis.get_offset_text().set_size(9)
                 mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.35", lw=1.0)
 
-
         fig.tight_layout()
 
         if show:
             plt.show()
-        else: 
+        else:
             if self.png_figures:
                 fig.savefig(os.path.join(self.PATH_TO_DATA, plot_save_name + ".png"))
             if self.svg_figures:
-                fig.savefig(os.path.join(self.PATH_TO_DATA, plot_save_name + ".svg"))    
+                fig.savefig(os.path.join(self.PATH_TO_DATA, plot_save_name + ".svg"))
             plt.close(fig)
 
     def mobo_3d_pareto(
