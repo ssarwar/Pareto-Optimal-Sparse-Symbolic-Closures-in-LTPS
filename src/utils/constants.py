@@ -13,7 +13,7 @@ class PhysicalConstants:
     MHz_Hz = 1e6 # 1MHz -> Hz
     kb = 1.380649e-23 # boltzmann constant [JK^-1]
     K_eV = 11600
-    mean_pressure = 15.422872340425531 # [mPa]
+    mean_pressure = 15.422872340425531 # [mTorr]
     mean_frequency = 32.81808510638297 # [MHz]
 
 @dataclass(frozen=True)
@@ -27,5 +27,3 @@ class OtherConstants:
     sig_figs = 5
     random_state = 42
     rng = np.random.default_rng(seed=random_state)
-
-
