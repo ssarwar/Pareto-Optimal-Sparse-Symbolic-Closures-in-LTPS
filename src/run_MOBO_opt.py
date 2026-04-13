@@ -27,7 +27,7 @@ o = Consts.OtherConstants()
 tkwargs = {"dtype": o.dtype, "device": o.device}
 lib = Lib.Library(**tkwargs)
 
-if len(sys.argv) < 2:
+if len(sys.argv) < 3:
     raise SystemExit("Usage: run_MOBO.py <case> [num_new_trials] [optional_snapshot_path]")
 case = sys.argv[1]
 num_new_trials = int(sys.argv[2])
