@@ -8,11 +8,12 @@ dist/
 *.egg-info/
 pip-wheel-metadata/
 
-# Test and tooling caches
+# Caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .ipynb_checkpoints/
+.matplotlib_cache/
 
 # Editor settings
 .vscode/
@@ -26,3 +27,4 @@ pip-wheel-metadata/
 *.jpg
 *.jpeg
 *.svg
+*.npz
