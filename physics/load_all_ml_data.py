@@ -4,29 +4,48 @@ import os
 import re
 import pickle
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 import warnings
 warnings.filterwarnings("ignore", message=".*Attempting to set identical low and high xlims.*")
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DATA_FOLDER = REPO_ROOT / "data" / "rf" / "pic" / "ml_data"
+
+
+GRID_DATASETS = [
+	#'rho',
+	#'nu_e_el',
+	#'nu_e_ex1',
+	#'nu_e_ex2',
+	'nu_e_ion',
+	'nu_i_cx',
+	'nu_i_iso',
+	#'jtot',
+	#'ni',
+	#'ne',
+	#'E',
+	#'flux_i',
+	#'flux_e',
+	#'phi',
+	#'EdotJ',
+	#'Ti',
+	#'Te',
+]
+
+PHASE_DATASETS = [
+	#'ivdf_2d',
+	#'evdf_2d',
+]
 
 
 #Main loop
 def main():
 
-	#File names
+	#File names produced by prep_all_ml_data_new.py
 	file_names = []
-	file_names.append('ml_data/ccp_E.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_Te.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_Ti.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_ne.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_ni.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_phi.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_ve.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_vi.pkl') #1D grid based data
-	file_names.append('ml_data/ccp_iedf_surface_1d.pkl') #1D data on an energy grid
-	file_names.append('ml_data/ccp_evdf_center_1d.pkl') #1D data on an energy grid
-	file_names.append('ml_data/ccp_evdf_2d.pkl') #2D phase space data on x-vx grid
-	file_names.append('ml_data/ccp_ivdf_2d.pkl') #2D phase space data on x-vx grid
-	file_names.append('ml_data/ccp_iaedf_surface_2d.pkl') #2D data on an energy-angle grid
+	for save_name in GRID_DATASETS + PHASE_DATASETS:
+		file_names.append(f'{DATA_FOLDER}/ccp_{save_name}.pkl')
 
 	#Plotting logic
 	plot_data = False
@@ -35,10 +54,14 @@ def main():
 	for fn in file_names:
 
 		print(fn)
+		if not os.path.exists(fn):
+			raise FileNotFoundError(f'Missing ML dataset: {fn}')
 		
 		#Loading the data
 		with open(fn, 'rb') as f:
 			data_all = pickle.load(f)
+
+		validate_dataset(data_all, fn)
 
 		#Directory for plotting
 		plot_dir = 'plots_' + fn.split('/')[-1].split('.')[0]
@@ -48,11 +71,51 @@ def main():
 
 		#Extracting 1d data
 		if nl == 4:
-			extract_data_1d(data_all, plot=True, plot_dir=plot_dir)
+			extract_data_1d(data_all, plot=plot_data, plot_dir=plot_dir)
 		
 		#Extracting 2d data
 		elif nl == 5:
-			extract_data_2d(data_all, plot=True, plot_dir=plot_dir)
+			extract_data_2d(data_all, plot=plot_data, plot_dir=plot_dir)
+		else:
+			raise ValueError(f'Unsupported record length {nl} in {fn}')
+
+
+def validate_dataset(data_all, file_name):
+
+	if len(data_all) == 0:
+		raise ValueError(f'Empty dataset: {file_name}')
+
+	first_len = len(data_all[0])
+	if first_len not in (4, 5):
+		raise ValueError(f'Unexpected record length {first_len} in {file_name}')
+
+	for idx, data in enumerate(data_all):
+		if len(data) != first_len:
+			raise ValueError(f'Inconsistent record length in {file_name} at entry {idx}')
+
+		freq = float(data[0])
+		press = float(data[1])
+		if not np.isfinite(freq) or not np.isfinite(press):
+			raise ValueError(f'Non-finite frequency/pressure in {file_name} at entry {idx}')
+
+		xgrid = np.asarray(data[2])
+		vals = np.asarray(data[-1])
+		if xgrid.ndim != 1:
+			raise ValueError(f'xgrid must be 1D in {file_name} at entry {idx}')
+
+		if first_len == 4:
+			if vals.ndim != 1:
+				raise ValueError(f'1D values must be 1D in {file_name} at entry {idx}')
+			if len(xgrid) != len(vals):
+				raise ValueError(f'xgrid/value size mismatch in {file_name} at entry {idx}')
+		else:
+			ygrid = np.asarray(data[3])
+			if ygrid.ndim != 1:
+				raise ValueError(f'ygrid must be 1D in {file_name} at entry {idx}')
+			if vals.ndim != 2:
+				raise ValueError(f'2D values must be 2D in {file_name} at entry {idx}')
+			if vals.shape != (len(ygrid), len(xgrid)):
+				raise ValueError(f'Grid/value shape mismatch in {file_name} at entry {idx}: expected {(len(ygrid), len(xgrid))}, got {vals.shape}')
 
 
 
@@ -76,13 +139,6 @@ def extract_data_1d(data_all, plot, plot_dir):
 
 		#Getting the grid node locations (vector)
 		xgrid = data[2]
-		#print(xgrid)
-		#Computing grid spacing
-		ncells = len(xgrid) - 1
-
-		#Writing to file
-		with open('grid_spacing_data.txt', 'a') as f:
-			f.write(f'{freq:.2f} MHz, {press:.2f} mTorr, number of cells: {ncells}\n')
 
 		#Getting the density data (vector)
 		vals = data[3]
@@ -151,7 +207,7 @@ def plot_line_1d(file_name, X, Y, xlabel = r'x', ylabel = r'y', legend=None, ymi
 
     #Setting limits and labels
     ax.set_xlim([X[0],X[-1]])
-    #ax.set_ylim([Y[-1],Y[0]])
+    ax.set_ylim([ymin,ymax])
     ax.set_xlabel(xlabel, fontsize=label_size)
     ax.set_ylabel(ylabel, fontsize=label_size)
 
@@ -187,7 +243,7 @@ def plot_surf_2d(file_name, X, Y, Z, nlev = 24, xlabel = r'x', ylabel = r'y'):
 
 		#Setting limits and labels
 		ax.set_xlim([X[0],X[-1]])
-		#ax.set_ylim([Y[0],Y[-1]])
+		ax.set_ylim([Y[0],Y[-1]])
 		ax.set_xlabel(xlabel, fontsize=label_size)
 		ax.set_ylabel(ylabel, fontsize=label_size)
 
