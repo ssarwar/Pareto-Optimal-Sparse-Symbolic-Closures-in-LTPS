@@ -8,7 +8,7 @@
 # and tables presentated in the paper.
 
 # The physicsal units are as follows:
-#   - P is in mTorr
+#   - P is in Pa (converted from mTorr)
 #   - F is in MHz
 #   - Te, Ti are in eV
 #   - E is in V/m
@@ -34,6 +34,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # The repo stores the mean bulk dataset under the key "profiles".
 profiles = np.load(DATA_FILE)["profiles"]
 scales = np.load(SCALE_FILE)
+mTorr_to_Pa = 0.13332237
+mHz_to_Hz = 1e6
 
 # These scaling constants convert the normalized dataset back to physical units.
 # src/nondimensionalizing_profiles.ipynb has details on how these are computed and saved.
@@ -43,8 +45,8 @@ Te0 = float(scales["Te0"])              # electron temperature in eV
 Ti0 = float(scales["Ti0"])              # ion temperature in eV
 E0 = float(scales["E0"])                # electric field in V/m
 flux0 = float(scales["flux0"])          # ion flux in m^-2 s^-1
-P0 = float(scales["P0"])                # gas pressure in mTorr
-F0 = float(scales["F0"])                # RF driving frequency in MHz
+P0 = float(scales["P0"]) * mTorr_to_Pa  # gas pressure in Pa (convert from mTorr)
+F0 = float(scales["F0"])                # RF driving frequency in Hz
 L0 = 0.05                               # inter - electrode distance in m, used to normalize lengths 
 
 
@@ -62,7 +64,7 @@ models = {
     'a': {'n*E/P': 0.110, 'n*E*P': 0.087},
     'b': {'n*E/P': 0.006, 'n*sqrt(E/P)': 0.122, 'sqrt(Te*Ti)*dn/dx': -0.030},
     'c': {'n*E/P': 0.031, 'n*sqrt(E/P)': 0.084, 'Te*dn/dx': -0.035, 'dn/dx': -0.001},
-    'd': {'n*sqrt(E/P)': 0.111, 'dn/dx': -0.048, 'sqrt(Ti)*dn/dx': -0.001, 'n*P*sqrt(E*Te)': -0.016}
+    'd': {'n*sqrt(E/P)': 0.111, 'dn/dx': -0.048, '(F/P)*dn/dx': -0.008, 'sqrt(Ti)*dn/dx': -0.001, 'n*P*sqrt(E*Te)': -0.016}
 }
 
 # ------------------------------------------------------------
@@ -86,6 +88,7 @@ multipliers = {
     'E/P dn/dx': flux0 * L0 * P0 / (ni0 * E0),
     'sqrt(Ti)*dn/dx': flux0 * L0 / (ni0 * np.sqrt(Ti0)),
     'n*P*sqrt(E*Te)': flux0 / (ni0 * P0 * np.sqrt(E0 * Te0)),
+    '(F/P)*dn/dx': flux0 * L0 * P0 / (ni0 * F0)
 }
 
 phys_models: Dict[str, Dict[str, float]] = {
@@ -94,7 +97,7 @@ phys_models: Dict[str, Dict[str, float]] = {
 }
 
 def print_denormalized_models():
-    print('Denormalized models (P in mTorr, E in V/m, T in eV, n in m^-3, dn/dx in m^-4)')
+    print('Denormalized models (P in Pa, E in V/m, T in eV, n in m^-3, dn/dx in m^-4, F in MHz)')
     print('--------------------------------------------------------------------------------')
     for m, d in phys_models.items():
         print(f'Model {m}: {d}')
