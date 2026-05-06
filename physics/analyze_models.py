@@ -19,6 +19,7 @@
 # -----------------------------------------------------------------------------
 
 from pathlib import Path
+import pprint
 import numpy as np
 from typing import Dict
 
@@ -46,7 +47,7 @@ Ti0 = float(scales["Ti0"])              # ion temperature in eV
 E0 = float(scales["E0"])                # electric field in V/m
 flux0 = float(scales["flux0"])          # ion flux in m^-2 s^-1
 P0 = float(scales["P0"]) * mTorr_to_Pa  # gas pressure in Pa (convert from mTorr)
-F0 = float(scales["F0"])                # RF driving frequency in Hz
+F0 = float(scales["F0"])                # RF driving frequency in MHz
 L0 = 0.05                               # inter - electrode distance in m, used to normalize lengths 
 
 
@@ -105,3 +106,20 @@ def print_denormalized_models():
 
 
 print_denormalized_models()
+
+
+# ------------------------------------- Reference feature estimate ------------------------------------------
+# Estimate the coefficient of the reference feature n*sqrt(E/P) from first principles.
+
+T_g = 300.0                                     # gas temperature in K
+m_i = 40.0 * 1.66e-27                           # ion mass in kg (argon)
+m_g = 40.0 * 1.66e-27                           # gas mass in kg (argon)
+k_B = 1.38e-23                                  # Boltzmann constant in J/K
+q = 1.6e-19                                     # elementary charge in C
+reduced_mass = (m_i * m_g) / (m_i + m_g)
+sigma = 5e-18                                  # Ar+ - Ar momentum transfer collision cross-section in m^2
+
+w_ref  = np.sqrt((2 * k_B * T_g * q / (np.pi * reduced_mass * sigma)))
+
+print(f"Given a cross-section: {sigma:.3e} m^2")
+print(f"Reference feature n*sqrt(E/P) coefficient : {w_ref:.5f} C^(1/2) s^(-1)")
