@@ -1,5 +1,5 @@
 """
-Compute and plot the inverse of the Eq. (15) ratio for argon CCP PIC cases.
+Compute and plot K_omega for argon CCP PIC cases.
 
 For each case, the plotted quantity is
 
