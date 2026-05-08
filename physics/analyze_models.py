@@ -7,7 +7,7 @@
 # Note that the model terms and coefficients are hardcoded from the results
 # and tables presentated in the paper.
 
-# The physicsal units are as follows:
+# The physical units are as follows:
 #   - P is in Pa (converted from mTorr)
 #   - F is in MHz
 #   - Te, Ti are in eV
