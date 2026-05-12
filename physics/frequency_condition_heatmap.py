@@ -92,6 +92,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import scienceplots
+
 import numpy as np
 from matplotlib.ticker import MaxNLocator
 
@@ -606,6 +608,8 @@ def plot_ratio_heatmap(
     vmax = min(vmax, 100.0)
     # END WARNING
 
+    plt.style.use(["science", "nature", "no-latex"])
+
     if np.isclose(vmin, vmax):
         pad = 0.05 * abs(vmin) if vmin != 0.0 else 1.0
         vmin -= pad
@@ -634,13 +638,13 @@ def plot_ratio_heatmap(
         label="PIC cases",
     )
 
-    ax.set_xlabel("Pressure [mTorr]", fontsize=15)
-    ax.set_ylabel("Frequency [MHz]", fontsize=15)
+    ax.set_xlabel("Pressure [mTorr]", fontsize=12)
+    ax.set_ylabel("Frequency [MHz]", fontsize=12)
     #ax.set_title(title, fontsize=13, pad=8)
     ax.set_xlim(p_edges[0], p_edges[-1])
     ax.set_ylim(f_edges[0], f_edges[-1])
     ax.minorticks_on()
-    ax.tick_params(which="major", direction="in", top=True, right=True, length=5, width=0.9, labelsize=12)
+    ax.tick_params(which="major", direction="in", top=True, right=True, length=5, width=0.9, labelsize=11)
     ax.tick_params(which="minor", direction="in", top=True, right=True, length=3, width=0.7)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
     ax.yaxis.set_major_locator(MaxNLocator(nbins=6))
@@ -649,7 +653,7 @@ def plot_ratio_heatmap(
 
     #cbar = fig.colorbar(pcm, ax=ax, pad=0.02, fraction=0.055)
     cbar = fig.colorbar(pcm, ax=ax)
-    cbar.set_label(r"$\left| \tilde{N}_{i1}(k, \omega \rightarrow 0)\right|  / \left| \tilde{N}_{i1}(k,\omega_F) \right|$", fontsize=13)
+    cbar.set_label(r"$\left| \tilde{N}_{i1}(k, \omega \rightarrow 0)\right|  / \left| \tilde{N}_{i1}(k,\omega_F) \right|$", fontsize=12)
 
     # Set ticks manually to ensure a reasonable number of ticks even if the range is small or large.
     num_ticks = 5
